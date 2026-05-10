@@ -6,6 +6,6 @@ edition = "2024"
 [dependencies]
 hecs = "0.10"
 glam = "0.32.1"
-rand = "0.10.1"
+rand = "0.8.0"
 uuid = { version = "1.8", features = ["v4", "fast-rng"] }
-eframe = "0.27"
+eframe = "0.29"
