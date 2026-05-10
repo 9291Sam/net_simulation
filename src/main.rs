@@ -1,7 +1,7 @@
 mod app;
 mod network;
 mod pager_simulation;
-mod player;
+mod person;
 mod simulation_environment;
 
 fn main() -> eframe::Result<()>

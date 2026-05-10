@@ -3,14 +3,14 @@ use eframe::egui;
 use crate::pager_simulation::PagerSimulation;
 use crate::simulation_environment::GRID_SIZE;
 
-const DEFAULT_AGENT_COUNT: usize = 170;
+const DEFAULT_NUMBER_OF_PEOPLE: usize = 170;
 const DEFAULT_TRANSMISSION_RANGE_UNITS: f32 = 3.0;
 
 pub struct PagerSimulationApp
 {
     sim:                      PagerSimulation,
     transmission_range_units: f32,
-    number_of_players:        usize
+    number_of_people:         usize
 }
 
 impl PagerSimulationApp
@@ -18,9 +18,9 @@ impl PagerSimulationApp
     pub fn new(_cc: &eframe::CreationContext<'_>) -> Self
     {
         Self {
-            sim:                      PagerSimulation::new(DEFAULT_AGENT_COUNT),
+            sim:                      PagerSimulation::new(DEFAULT_NUMBER_OF_PEOPLE),
             transmission_range_units: DEFAULT_TRANSMISSION_RANGE_UNITS,
-            number_of_players:        DEFAULT_AGENT_COUNT
+            number_of_people:         DEFAULT_NUMBER_OF_PEOPLE
         }
     }
 }
@@ -32,7 +32,7 @@ impl eframe::App for PagerSimulationApp
         self.sim.step(self.transmission_range_units);
 
         egui::SidePanel::left("controls")
-            .exact_width(256.0)
+            .exact_width(284.0)
             .show(ctx, |ui| {
                 ui.add(
                     egui::Slider::new(&mut self.transmission_range_units, 1.1..=8.0)
@@ -40,36 +40,33 @@ impl eframe::App for PagerSimulationApp
                 );
 
                 if ui
-                    .add(
-                        egui::Slider::new(&mut self.number_of_players, 50..=400).text("Crowd Size")
-                    )
+                    .add(egui::Slider::new(&mut self.number_of_people, 50..=400).text("Crowd Size"))
                     .changed()
                 {
-                    self.sim = PagerSimulation::new(self.number_of_players);
+                    self.sim = PagerSimulation::new(self.number_of_people);
                 }
 
-                ui.add_space(20.0);
-                if ui.button("Inject Broadcast").clicked()
+                if ui.button("send pager message").clicked()
                 {
-                    self.sim.inject_broadcast();
+                    self.sim.send_pager_message();
                 }
-                if ui.button("Clear Network").clicked()
+                if ui.button("Reset").clicked()
                 {
-                    self.sim.clear_network();
+                    self.sim = PagerSimulation::new(self.number_of_people);
                 }
 
-                ui.add_space(20.0);
-                ui.label("Infection Timeline:");
+                ui.label("% received pager message");
 
                 let (graph_res, painter) =
                     ui.allocate_painter(egui::vec2(230.0, 150.0), egui::Sense::hover());
                 painter.rect_filled(graph_res.rect, 2.0, egui::Color32::from_gray(30));
 
-                if self.sim.saturation_history.len() > 1
+                // thanks egui for not being able to render an empty set!
+                if self.sim.successful_transmission_percentages_per_tick.len() > 1
                 {
                     let pts: Vec<egui::Pos2> = self
                         .sim
-                        .saturation_history
+                        .successful_transmission_percentages_per_tick
                         .iter()
                         .enumerate()
                         .map(|(i, &sat)| {
@@ -77,18 +74,26 @@ impl eframe::App for PagerSimulationApp
                                 graph_res.rect.left()
                                     + (i as f32
                                         * (graph_res.rect.width()
-                                            / self.sim.saturation_history.len() as f32)),
+                                            / self
+                                                .sim
+                                                .successful_transmission_percentages_per_tick
+                                                .len()
+                                                as f32)),
                                 graph_res.rect.bottom() - (sat * graph_res.rect.height())
                             )
                         })
                         .collect();
                     painter.add(egui::Shape::line(
                         pts,
-                        egui::Stroke::new(2.0, egui::Color32::GREEN)
+                        egui::Stroke::new(2.0_f32, egui::Color32::GREEN)
                     ));
                     ui.label(format!(
-                        "Saturation: {:.1}%",
-                        self.sim.saturation_history.last().unwrap() * 100.0
+                        "{:.1}%",
+                        self.sim
+                            .successful_transmission_percentages_per_tick
+                            .last()
+                            .unwrap()
+                            * 100.0
                     ));
                 }
             });
@@ -118,28 +123,28 @@ impl eframe::App for PagerSimulationApp
                 }
             }
 
-            for event in &self.sim.visual_events
+            for m in &self.sim.recently_transmitted_messages_positions
             {
                 let o = offset
                     + egui::vec2(
-                        event.origin.x * cell_size + cell_size / 2.0,
-                        event.origin.y * cell_size + cell_size / 2.0
+                        m.origin.x * cell_size + cell_size / 2.0,
+                        m.origin.y * cell_size + cell_size / 2.0
                     );
                 let d = offset
                     + egui::vec2(
-                        event.destination.x * cell_size + cell_size / 2.0,
-                        event.destination.y * cell_size + cell_size / 2.0
+                        m.destination.x * cell_size + cell_size / 2.0,
+                        m.destination.y * cell_size + cell_size / 2.0
                     );
                 let color = egui::Color32::from_rgba_unmultiplied(
                     0,
                     255,
                     255,
-                    (255.0 * (event.frames_remaining as f32 / 60.0)) as u8
+                    (255.0 * (m.frames_remaining as f32 / 60.0)) as u8
                 );
-                painter.line_segment([o, d], egui::Stroke::new(1.5, color));
+                painter.line_segment([o, d], egui::Stroke::new(1.5_f32, color));
             }
 
-            for p in &self.sim.players
+            for p in &self.sim.people
             {
                 let pos = offset
                     + egui::vec2(
